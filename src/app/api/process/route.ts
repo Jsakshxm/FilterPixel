@@ -1,51 +1,54 @@
-// pages/api/process.ts
 
-import type { NextApiRequest, NextApiResponse } from 'next';
+
+import { NextRequest, NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
-import { NextResponse } from 'next/server';
 
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '10mb', // Allow large image uploads
-    },
-  },
-};
 
-export async function POST(request: Request) {
+export const runtime = 'edge';
+
+export async function POST(req: NextRequest) {
   try {
-    const { image, settings } = await request.json();
+    const body = await req.json();
+    const { image, settings } = body;
 
-    // Validate input
+
     if (!image || !settings) {
       return NextResponse.json({ error: 'Invalid input. Image and settings are required.' }, { status: 400 });
     }
 
-    // Decode base64 image
+
     const imageBuffer = Buffer.from(image.split(',')[1], 'base64');
+
+    // Validate format
+    const validFormats = ['jpeg', 'png', 'webp', 'tiff'];
+    if (!validFormats.includes(settings.format)) {
+      return NextResponse.json({ error: 'Invalid image format' }, { status: 400 });
+    }
 
     // Process image using Sharp
     const processedImageBuffer = await sharp(imageBuffer)
-      .rotate(settings.rotation || 0)
       .modulate({
-        brightness: settings.brightness / 100,
-        saturation: settings.saturation / 100,
+        brightness: settings.brightness / 100 || 1, 
+        saturation: settings.saturation / 100 || 1, 
       })
-      .toFormat(settings.format)
-      .toBuffer();
+      .rotate(settings.rotation || 0) 
+      .toFormat(settings.format) 
+      .toBuffer(); 
 
-    // Return the processed image as a blob
-    return new NextResponse(processedImageBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': `image/${settings.format}`,
-        'Content-Disposition': `attachment; filename="processed_image.${settings.format}"`,
-      },
-    });
 
+    const fileName = `processed-image-${uuidv4()}.${settings.format}`;
+    const outputPath = path.join(process.cwd(), 'public', fileName);
+
+
+    await fs.writeFile(outputPath, processedImageBuffer);
+
+
+    const imageUrl = `/${fileName}`;
+    return NextResponse.json({ url: imageUrl }, { status: 200 });
+    
   } catch (error) {
     console.error('Image processing error:', error);
     return NextResponse.json({ error: 'Image processing failed' }, { status: 500 });
