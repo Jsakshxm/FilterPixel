@@ -30,15 +30,17 @@ export function ImageEditorComponent() {
   
       const blob = await response.blob();
       const downloadUrl = URL.createObjectURL(blob);
-      setDownloadUrl(downloadUrl);
 
-
+      // Trigger download
       const link = document.createElement('a');
       link.href = downloadUrl;
       link.download = `processed_image.${imageSettings.format}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      // Clean up the object URL after download
+      URL.revokeObjectURL(downloadUrl);
     } catch (error) {
       console.error(error);
     } finally {
